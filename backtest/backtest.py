@@ -1,13 +1,13 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.decomposition import PCA
 from numpy.linalg import inv
 import cvxopt as opt
 from cvxopt import blas, solvers
-
-
+from sklearn import linear_model
+import math
+    
 class Backtesting():
     def __init__(self,df,df_rf,frequency,window,factors,start='1980',end='2017'):
         # backtest attributes
@@ -29,6 +29,8 @@ class Backtesting():
         
     
     def _factor_cov(self,df):
+        # input: training data
+        # output: PCA factor constrained covariance matrix
         k = self.factors
         M = self.window
         pca = PCA()
@@ -224,5 +226,41 @@ class Backtesting():
         mu = self.backtest_ret.apply(np.mean,axis=0)*self.N
         sd = self.backtest_ret.apply(np.std,axis=0)*np.sqrt(self.N)
         return mu/sd
+
+    def alpha_beta(self):
+        FC_regr = linear_model.LinearRegression().fit(self.backtest_ret[['Mkt-RF']],self.backtest_ret['FC'])
+        FC_ab = {'Port':'FC','beta':FC_regr.coef_[0],'alpha': FC_regr.intercept_*self.N}
+        S_regr = linear_model.LinearRegression().fit(self.backtest_ret[['Mkt-RF']],self.backtest_ret['Simply'])
+        S_ab = {'Port':'S','beta':S_regr.coef_[0],'alpha': S_regr.intercept_*self.N}
+        return [FC_ab,S_ab]
+
+    def IR(self):
+        def _IR(returns):     
+            return_difference = returns - self.backtest_ret['Mkt-RF'] 
+            volatility = return_difference.std() * np.sqrt(self.N) 
+            information_ratio = return_difference.mean()*self.N / volatility
+            return information_ratio
+        return {'FC':_IR(self.backtest_ret['FC']), 'Simply':_IR(self.backtest_ret['Simply']) }
+
+    def sortino_ratio(self):
+        def lpm(returns, threshold, order):
+            # This method returns a lower partial moment of the returns
+            # Create an array he same length as returns containing the minimum return threshold
+            threshold_array = np.empty(len(returns))
+            threshold_array.fill(threshold)
+            # Calculate the difference between the threshold and the returns
+            diff = threshold_array - returns
+            # Set the minimum of each to 0
+            diff = diff.clip(lower=0)
+            # Return the sum of the different to the power of order
+            return np.sum(diff ** order) / len(returns)
+
+        def sortino_ratio(er, returns, target=0):
+            return (er) / math.sqrt(lpm(returns, target, 2))
+
+        return {'FC': sortino_ratio(self.backtest_ret['FC'].mean(), self.backtest_ret['FC'])*np.sqrt(self.N),\
+                'S': sortino_ratio(self.backtest_ret['Simply'].mean(), self.backtest_ret['Simply'])*np.sqrt(self.N)}
+
+
     
     
