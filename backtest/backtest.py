@@ -74,6 +74,7 @@ class Backtesting():
         backtest_ret = backtest_ret.join(self.mkt_rf,how='left')
         return backtest_ret
 
+
     def backtest_unconstrained(self, port_type):
         self.backtest_ret = None
 
@@ -92,7 +93,6 @@ class Backtesting():
 
         # backtesting:       
         M = self.window
-        k = self.factors  # number of factors
               
         # first weight calculate from first 3 yr, apply to 3yr + 1 th week
         w_S = np.zeros((self.port_exret.shape[0]-M,self.port_exret.shape[1]))
@@ -170,6 +170,9 @@ class Backtesting():
 
         # backtesting 
         backtest_ret = self._get_ret_by_weight(w_FC,w_S)
+
+        # add back rf
+
         self.backtest_ret = backtest_ret
 
         return backtest_ret
@@ -192,7 +195,12 @@ class Backtesting():
             print('Run backtesting first')
             return None
 
-        return self.backtest_ret.cumsum(axis = 0).apply(np.exp,axis=0)
+        p = self.backtest_ret.join(self.rf,how='left')
+        p['FC'] += p['RF']
+        p['Simply'] += p['RF']
+        p['Mkt'] = p['Mkt-RF'] + p['RF']
+        p = p[['FC', 'Simply', 'Mkt']]
+        return p.cumsum(axis = 0).apply(np.exp,axis=0)
 
          
     def vol_ewma(self,M,lambd):
